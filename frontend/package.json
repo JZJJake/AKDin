@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@guolao/vue-monaco-editor": "^1.6.0",
+    "axios": "^1.13.5",
     "echarts": "^6.0.0",
     "element-plus": "^2.13.2",
     "monaco-editor": "^0.55.1",

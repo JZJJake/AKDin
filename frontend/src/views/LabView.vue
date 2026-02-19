@@ -1,9 +1,13 @@
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
+import axios from 'axios'
+import * as echarts from 'echarts'
+import { ElMessage } from 'element-plus'
 
-const code = ref(`import pandas as pd
-from app.engine.base import BaseStrategy
+const code = ref(`# Imports are pre-loaded in the sandbox:
+# import pandas as pd
+# from app.engine.base import BaseStrategy
 
 class MultiTimeframeKDJStrategy(BaseStrategy):
     def init(self):
@@ -58,9 +62,71 @@ class MultiTimeframeKDJStrategy(BaseStrategy):
             self.sell(self.position.quantity)
 `)
 
-const runBacktest = () => {
-  console.log('Running backtest with code:', code.value)
-  // TODO: Implement backend integration
+const chartRef = ref<HTMLElement | null>(null)
+const hasResult = ref(false)
+let myChart: echarts.ECharts | null = null
+
+const runBacktest = async () => {
+  try {
+    const payload = {
+      strategy_code: code.value,
+      symbol: "000001",
+      start_date: "20230101",
+      end_date: "20240101"
+    }
+
+    ElMessage.info('Running backtest...')
+
+    // Assuming backend is running on 8000
+    const response = await axios.post('http://localhost:8000/api/v1/backtest', payload)
+    const result = response.data
+
+    if (result.equity_curve && result.equity_curve.length > 0) {
+      const dates = result.equity_curve.map((item: any) => item.date)
+      const values = result.equity_curve.map((item: any) => item.equity)
+
+      hasResult.value = true
+
+      // Wait for DOM update
+      await nextTick()
+
+      if (chartRef.value) {
+        if (!myChart) {
+           myChart = echarts.init(chartRef.value)
+        }
+
+        myChart.setOption({
+            title: { text: 'Equity Curve' },
+            tooltip: { trigger: 'axis' },
+            xAxis: { type: 'category', data: dates },
+            yAxis: { type: 'value', scale: true },
+            series: [{
+                data: values,
+                type: 'line',
+                smooth: true,
+                areaStyle: {}
+            }],
+            grid: {
+                left: '3%',
+                right: '4%',
+                bottom: '3%',
+                containLabel: true
+            }
+        })
+
+        myChart.resize()
+
+        const returnPct = (result.total_return * 100).toFixed(2)
+        ElMessage.success(`Backtest Complete! Return: ${returnPct}%`)
+      }
+    } else {
+        ElMessage.warning('Backtest finished but returned no data.')
+    }
+  } catch (e: any) {
+    console.error(e)
+    const msg = e.response?.data?.detail || e.message
+    ElMessage.error('Backtest failed: ' + msg)
+  }
 }
 </script>
 
@@ -92,9 +158,10 @@ const runBacktest = () => {
         <el-button type="primary" @click="runBacktest">一键回测 (Run Backtest)</el-button>
       </div>
       <div class="chart-container">
-        <div class="chart-placeholder-text">
+        <div v-show="!hasResult" class="chart-placeholder-text">
           Backtest visualization will appear here
         </div>
+        <div ref="chartRef" style="width: 100%; height: 100%;" v-show="hasResult"></div>
       </div>
     </div>
   </div>
@@ -150,10 +217,12 @@ const runBacktest = () => {
   justify-content: center;
   background-color: #ffffff;
   position: relative;
+  overflow: hidden;
 }
 
 .chart-placeholder-text {
   color: #909399;
   font-size: 14px;
+  position: absolute;
 }
 </style>
