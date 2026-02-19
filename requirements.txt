@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+sqlalchemy
+alembic
+psycopg2-binary
+akshare
+pandas
+python-dotenv
+requests
+pydantic-settings
