@@ -81,9 +81,19 @@ const runBacktest = async () => {
     const response = await axios.post('http://localhost:8000/api/v1/backtest', payload)
     const result = response.data
 
-    if (result.equity_curve && result.equity_curve.length > 0) {
-      const dates = result.equity_curve.map((item: any) => item.date)
-      const values = result.equity_curve.map((item: any) => item.equity)
+    if (result.equity_curve && result.equity_curve.length > 0 && result.kline_data) {
+      const dates = result.kline_data.map((item: any) => item.date)
+      const ohlc = result.kline_data.map((item: any) => [item.open, item.close, item.low, item.high])
+      const equityValues = result.equity_curve.map((item: any) => item.equity)
+
+      // Process Trades for Markers
+      const buyMarkers = result.trades
+        .filter((t: any) => t.side === 'buy')
+        .map((t: any) => [t.timestamp.substring(0, 10), t.price])
+
+      const sellMarkers = result.trades
+        .filter((t: any) => t.side === 'sell')
+        .map((t: any) => [t.timestamp.substring(0, 10), t.price])
 
       hasResult.value = true
 
@@ -91,29 +101,130 @@ const runBacktest = async () => {
       await nextTick()
 
       if (chartRef.value) {
-        if (!myChart) {
-           myChart = echarts.init(chartRef.value)
+        if (myChart) {
+           myChart.dispose() // Re-init for clean slate or use clear
+        }
+        myChart = echarts.init(chartRef.value)
+
+        const option = {
+            tooltip: {
+                trigger: 'axis',
+                axisPointer: { type: 'cross' }
+            },
+            axisPointer: {
+                link: { xAxisIndex: 'all' }
+            },
+            grid: [
+                {
+                    left: '3%',
+                    right: '4%',
+                    height: '60%'
+                },
+                {
+                    left: '3%',
+                    right: '4%',
+                    top: '75%',
+                    height: '20%'
+                }
+            ],
+            xAxis: [
+                {
+                    type: 'category',
+                    data: dates,
+                    boundaryGap: false,
+                    axisLine: { onZero: false },
+                    splitLine: { show: false },
+                    min: 'dataMin',
+                    max: 'dataMax'
+                },
+                {
+                    type: 'category',
+                    gridIndex: 1,
+                    data: dates,
+                    boundaryGap: false,
+                    axisLine: { onZero: false },
+                    axisTick: { show: false },
+                    splitLine: { show: false },
+                    axisLabel: { show: false },
+                    min: 'dataMin',
+                    max: 'dataMax'
+                }
+            ],
+            yAxis: [
+                {
+                    scale: true,
+                    splitArea: { show: true }
+                },
+                {
+                    scale: true,
+                    gridIndex: 1,
+                    splitNumber: 2,
+                    axisLabel: { show: false },
+                    axisLine: { show: false },
+                    axisTick: { show: false },
+                    splitLine: { show: false }
+                }
+            ],
+            dataZoom: [
+                {
+                    type: 'inside',
+                    xAxisIndex: [0, 1],
+                    start: 50,
+                    end: 100
+                },
+                {
+                    show: true,
+                    type: 'slider',
+                    xAxisIndex: [0, 1],
+                    top: '95%',
+                    start: 50,
+                    end: 100
+                }
+            ],
+            series: [
+                {
+                    name: 'K-Line',
+                    type: 'candlestick',
+                    data: ohlc,
+                    itemStyle: {
+                        color: '#ef232a', // Up color (Red)
+                        color0: '#14b143', // Down color (Green)
+                        borderColor: '#ef232a',
+                        borderColor0: '#14b143'
+                    }
+                },
+                {
+                    name: 'Buy',
+                    type: 'scatter',
+                    symbol: 'triangle',
+                    symbolSize: 15,
+                    itemStyle: { color: '#ef232a' },
+                    data: buyMarkers,
+                    z: 10
+                },
+                {
+                    name: 'Sell',
+                    type: 'scatter',
+                    symbol: 'triangle',
+                    symbolSize: 15,
+                    itemStyle: { color: '#14b143' },
+                    symbolRotate: 180,
+                    data: sellMarkers,
+                    z: 10
+                },
+                {
+                    name: 'Equity',
+                    type: 'line',
+                    xAxisIndex: 1,
+                    yAxisIndex: 1,
+                    data: equityValues,
+                    showSymbol: false,
+                    lineStyle: { width: 2 }
+                }
+            ]
         }
 
-        myChart.setOption({
-            title: { text: 'Equity Curve' },
-            tooltip: { trigger: 'axis' },
-            xAxis: { type: 'category', data: dates },
-            yAxis: { type: 'value', scale: true },
-            series: [{
-                data: values,
-                type: 'line',
-                smooth: true,
-                areaStyle: {}
-            }],
-            grid: {
-                left: '3%',
-                right: '4%',
-                bottom: '3%',
-                containLabel: true
-            }
-        })
-
+        myChart.setOption(option)
         myChart.resize()
 
         const returnPct = (result.total_return * 100).toFixed(2)

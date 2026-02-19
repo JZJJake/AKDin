@@ -20,8 +20,12 @@ class TestBacktestAPI(unittest.TestCase):
 
         mock_df = pd.DataFrame({
             "close": close_prices,
-            "symbol": ["000001"] * 50
+            "symbol": ["000001"] * 50,
+            "open": close_prices, # Adding OHLC columns for realism
+            "high": close_prices + 1,
+            "low": close_prices - 1,
         }, index=dates)
+        mock_df.index.name = "date" # Mimic DataFetcher behavior
         mock_get_kline.return_value = mock_df
 
         # 2. Strategy Code (SMA) - NO IMPORTS, use pd directly
@@ -72,6 +76,16 @@ class TestStrategy(BaseStrategy):
             first_point = data["equity_curve"][0]
             self.assertIn("date", first_point)
             self.assertIn("equity", first_point)
+
+        # Check kline_data structure (New Requirement)
+        self.assertIn("kline_data", data)
+        if len(data["kline_data"]) > 0:
+            first_kline = data["kline_data"][0]
+            self.assertIn("date", first_kline)
+            self.assertIn("open", first_kline)
+            self.assertIn("close", first_kline)
+            self.assertIn("high", first_kline)
+            self.assertIn("low", first_kline)
 
 if __name__ == "__main__":
     unittest.main()

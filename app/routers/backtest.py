@@ -43,6 +43,14 @@ async def run_backtest(request: BacktestRequest) -> Dict[str, Any]:
         if "error" in result:
             raise HTTPException(status_code=500, detail=result["error"])
 
+        # Inject kline_data for frontend charting
+        # Convert index (date) to string for JSON serialization
+        df_chart = df.reset_index()
+        if 'date' in df_chart.columns:
+            df_chart['date'] = df_chart['date'].dt.strftime('%Y-%m-%d')
+
+        result["kline_data"] = df_chart.to_dict(orient="records")
+
         return result
 
     except HTTPException as he:
