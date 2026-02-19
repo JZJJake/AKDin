@@ -24,6 +24,7 @@ class TestBacktestAPI(unittest.TestCase):
             "open": close_prices, # Adding OHLC columns for realism
             "high": close_prices + 1,
             "low": close_prices - 1,
+            "volume": np.random.randint(1000, 10000, 50), # Add volume
         }, index=dates)
         mock_df.index.name = "date" # Mimic DataFetcher behavior
         mock_get_kline.return_value = mock_df
@@ -54,7 +55,8 @@ class TestStrategy(BaseStrategy):
             "strategy_code": strategy_code,
             "symbol": "000001",
             "start_date": "20230101",
-            "end_date": "20230301"
+            "end_date": "20230301",
+            "period": "daily"
         }
 
         response = client.post("/api/v1/backtest", json=payload)
@@ -80,12 +82,18 @@ class TestStrategy(BaseStrategy):
         # Check kline_data structure (New Requirement)
         self.assertIn("kline_data", data)
         if len(data["kline_data"]) > 0:
-            first_kline = data["kline_data"][0]
-            self.assertIn("date", first_kline)
-            self.assertIn("open", first_kline)
-            self.assertIn("close", first_kline)
-            self.assertIn("high", first_kline)
-            self.assertIn("low", first_kline)
+            last_kline = data["kline_data"][-1] # Check last to ensure indicators computed
+            self.assertIn("date", last_kline)
+            self.assertIn("open", last_kline)
+            self.assertIn("close", last_kline)
+            self.assertIn("high", last_kline)
+            self.assertIn("low", last_kline)
+
+            # Indicators
+            self.assertIn("ma20", last_kline)
+            self.assertIn("vol_ma5", last_kline)
+            self.assertIn("macd_dif", last_kline)
+            self.assertIn("kdj_k", last_kline)
 
 if __name__ == "__main__":
     unittest.main()

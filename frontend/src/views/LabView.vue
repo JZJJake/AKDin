@@ -64,6 +64,7 @@ class MultiTimeframeKDJStrategy(BaseStrategy):
 
 const chartRef = ref<HTMLElement | null>(null)
 const hasResult = ref(false)
+const timeframe = ref('daily')
 let myChart: echarts.ECharts | null = null
 
 const runBacktest = async () => {
@@ -72,21 +73,36 @@ const runBacktest = async () => {
       strategy_code: code.value,
       symbol: "000001",
       start_date: "20230101",
-      end_date: "20240101"
+      end_date: "20240101",
+      period: timeframe.value
     }
 
-    ElMessage.info('Running backtest...')
+    ElMessage.info(`Running backtest (${timeframe.value})...`)
 
-    // Assuming backend is running on 8000
     const response = await axios.post('http://localhost:8000/api/v1/backtest', payload)
     const result = response.data
 
     if (result.equity_curve && result.equity_curve.length > 0 && result.kline_data) {
+      // Data Preparation
       const dates = result.kline_data.map((item: any) => item.date)
       const ohlc = result.kline_data.map((item: any) => [item.open, item.close, item.low, item.high])
+
+      const ma20 = result.kline_data.map((item: any) => item.ma20)
+
+      const volume = result.kline_data.map((item: any) => item.volume)
+      const vol_ma5 = result.kline_data.map((item: any) => item.vol_ma5)
+
+      const macd_dif = result.kline_data.map((item: any) => item.macd_dif)
+      const macd_dea = result.kline_data.map((item: any) => item.macd_dea)
+      const macd_bar = result.kline_data.map((item: any) => item.macd_bar)
+
+      const kdj_k = result.kline_data.map((item: any) => item.kdj_k)
+      const kdj_d = result.kline_data.map((item: any) => item.kdj_d)
+      const kdj_j = result.kline_data.map((item: any) => item.kdj_j)
+
       const equityValues = result.equity_curve.map((item: any) => item.equity)
 
-      // Process Trades for Markers
+      // Markers
       const buyMarkers = result.trades
         .filter((t: any) => t.side === 'buy')
         .map((t: any) => [t.timestamp.substring(0, 10), t.price])
@@ -97,12 +113,11 @@ const runBacktest = async () => {
 
       hasResult.value = true
 
-      // Wait for DOM update
       await nextTick()
 
       if (chartRef.value) {
         if (myChart) {
-           myChart.dispose() // Re-init for clean slate or use clear
+           myChart.dispose()
         }
         myChart = echarts.init(chartRef.value)
 
@@ -112,115 +127,62 @@ const runBacktest = async () => {
                 axisPointer: { type: 'cross' }
             },
             axisPointer: {
-                link: { xAxisIndex: 'all' }
+                link: { xAxisIndex: 'all' },
+                label: { backgroundColor: '#777' }
             },
             grid: [
-                {
-                    left: '3%',
-                    right: '4%',
-                    height: '60%'
-                },
-                {
-                    left: '3%',
-                    right: '4%',
-                    top: '75%',
-                    height: '20%'
-                }
+                { left: '3%', right: '4%', top: '5%', height: '35%' }, // Grid 0: Main (K-Line + MA)
+                { left: '3%', right: '4%', top: '45%', height: '12%' }, // Grid 1: Volume
+                { left: '3%', right: '4%', top: '60%', height: '12%' }, // Grid 2: MACD
+                { left: '3%', right: '4%', top: '75%', height: '12%' }, // Grid 3: KDJ
+                { left: '3%', right: '4%', top: '90%', height: '10%' }  // Grid 4: Equity
             ],
             xAxis: [
-                {
-                    type: 'category',
-                    data: dates,
-                    boundaryGap: false,
-                    axisLine: { onZero: false },
-                    splitLine: { show: false },
-                    min: 'dataMin',
-                    max: 'dataMax'
-                },
-                {
-                    type: 'category',
-                    gridIndex: 1,
-                    data: dates,
-                    boundaryGap: false,
-                    axisLine: { onZero: false },
-                    axisTick: { show: false },
-                    splitLine: { show: false },
-                    axisLabel: { show: false },
-                    min: 'dataMin',
-                    max: 'dataMax'
-                }
+                { type: 'category', data: dates, gridIndex: 0, axisLine: { onZero: false }, min: 'dataMin', max: 'dataMax' },
+                { type: 'category', data: dates, gridIndex: 1, axisLine: { onZero: false }, axisLabel: { show: false }, axisTick: { show: false }, min: 'dataMin', max: 'dataMax' },
+                { type: 'category', data: dates, gridIndex: 2, axisLine: { onZero: false }, axisLabel: { show: false }, axisTick: { show: false }, min: 'dataMin', max: 'dataMax' },
+                { type: 'category', data: dates, gridIndex: 3, axisLine: { onZero: false }, axisLabel: { show: false }, axisTick: { show: false }, min: 'dataMin', max: 'dataMax' },
+                { type: 'category', data: dates, gridIndex: 4, axisLine: { onZero: false }, axisLabel: { show: false }, axisTick: { show: false }, min: 'dataMin', max: 'dataMax' }
             ],
             yAxis: [
-                {
-                    scale: true,
-                    splitArea: { show: true }
-                },
-                {
-                    scale: true,
-                    gridIndex: 1,
-                    splitNumber: 2,
-                    axisLabel: { show: false },
-                    axisLine: { show: false },
-                    axisTick: { show: false },
-                    splitLine: { show: false }
-                }
+                { scale: true, gridIndex: 0, splitArea: { show: true } },
+                { scale: true, gridIndex: 1, splitNumber: 2, axisLabel: { show: false }, axisTick: { show: false }, splitLine: { show: false } },
+                { scale: true, gridIndex: 2, splitNumber: 2, axisLabel: { show: false }, axisTick: { show: false }, splitLine: { show: false } },
+                { scale: true, gridIndex: 3, splitNumber: 2, axisLabel: { show: false }, axisTick: { show: false }, splitLine: { show: false } },
+                { scale: true, gridIndex: 4, splitNumber: 2, axisLabel: { show: false }, axisTick: { show: false }, splitLine: { show: false } }
             ],
             dataZoom: [
-                {
-                    type: 'inside',
-                    xAxisIndex: [0, 1],
-                    start: 50,
-                    end: 100
-                },
-                {
-                    show: true,
-                    type: 'slider',
-                    xAxisIndex: [0, 1],
-                    top: '95%',
-                    start: 50,
-                    end: 100
-                }
+                { type: 'inside', xAxisIndex: [0, 1, 2, 3, 4], start: 50, end: 100 },
+                { type: 'slider', xAxisIndex: [0, 1, 2, 3, 4], top: '96%', start: 50, end: 100 }
             ],
             series: [
+                // Grid 0
                 {
-                    name: 'K-Line',
-                    type: 'candlestick',
-                    data: ohlc,
-                    itemStyle: {
-                        color: '#ef232a', // Up color (Red)
-                        color0: '#14b143', // Down color (Green)
-                        borderColor: '#ef232a',
-                        borderColor0: '#14b143'
-                    }
+                    name: 'K-Line', type: 'candlestick', data: ohlc,
+                    itemStyle: { color: '#ef232a', color0: '#14b143', borderColor: '#ef232a', borderColor0: '#14b143' }
+                },
+                { name: 'MA20', type: 'line', data: ma20, smooth: true, lineStyle: { opacity: 0.5 } },
+                {
+                    name: 'Buy', type: 'scatter', symbol: 'triangle', symbolSize: 15,
+                    itemStyle: { color: '#ef232a' }, data: buyMarkers, z: 10
                 },
                 {
-                    name: 'Buy',
-                    type: 'scatter',
-                    symbol: 'triangle',
-                    symbolSize: 15,
-                    itemStyle: { color: '#ef232a' },
-                    data: buyMarkers,
-                    z: 10
+                    name: 'Sell', type: 'scatter', symbol: 'triangle', symbolSize: 15,
+                    itemStyle: { color: '#14b143' }, symbolRotate: 180, data: sellMarkers, z: 10
                 },
-                {
-                    name: 'Sell',
-                    type: 'scatter',
-                    symbol: 'triangle',
-                    symbolSize: 15,
-                    itemStyle: { color: '#14b143' },
-                    symbolRotate: 180,
-                    data: sellMarkers,
-                    z: 10
-                },
-                {
-                    name: 'Equity',
-                    type: 'line',
-                    xAxisIndex: 1,
-                    yAxisIndex: 1,
-                    data: equityValues,
-                    showSymbol: false,
-                    lineStyle: { width: 2 }
-                }
+                // Grid 1: Volume
+                { name: 'Volume', type: 'bar', xAxisIndex: 1, yAxisIndex: 1, data: volume, itemStyle: { color: '#7fbe9e' } },
+                { name: 'VOL_MA5', type: 'line', xAxisIndex: 1, yAxisIndex: 1, data: vol_ma5, smooth: true },
+                // Grid 2: MACD
+                { name: 'DIF', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: macd_dif },
+                { name: 'DEA', type: 'line', xAxisIndex: 2, yAxisIndex: 2, data: macd_dea },
+                { name: 'MACD', type: 'bar', xAxisIndex: 2, yAxisIndex: 2, data: macd_bar, itemStyle: { color: '#5470c6' } },
+                // Grid 3: KDJ
+                { name: 'K', type: 'line', xAxisIndex: 3, yAxisIndex: 3, data: kdj_k },
+                { name: 'D', type: 'line', xAxisIndex: 3, yAxisIndex: 3, data: kdj_d },
+                { name: 'J', type: 'line', xAxisIndex: 3, yAxisIndex: 3, data: kdj_j },
+                // Grid 4: Equity
+                { name: 'Equity', type: 'line', xAxisIndex: 4, yAxisIndex: 4, data: equityValues, showSymbol: false, lineStyle: { width: 2 } }
             ]
         }
 
@@ -266,7 +228,14 @@ const runBacktest = async () => {
     <div class="visual-pane">
       <div class="pane-header actions-header">
         <h3>Backtest Result</h3>
-        <el-button type="primary" @click="runBacktest">一键回测 (Run Backtest)</el-button>
+        <div class="actions">
+            <el-radio-group v-model="timeframe" size="small" style="margin-right: 15px;">
+                <el-radio-button label="daily">Daily</el-radio-button>
+                <el-radio-button label="weekly">Weekly</el-radio-button>
+                <el-radio-button label="monthly">Monthly</el-radio-button>
+            </el-radio-group>
+            <el-button type="primary" @click="runBacktest">一键回测 (Run Backtest)</el-button>
+        </div>
       </div>
       <div class="chart-container">
         <div v-show="!hasResult" class="chart-placeholder-text">
@@ -297,6 +266,10 @@ const runBacktest = async () => {
   overflow: hidden;
 }
 
+.visual-pane {
+    overflow-y: auto; /* Allow scrolling for tall chart */
+}
+
 .pane-header {
   padding: 10px 15px;
   background-color: #f5f7fa;
@@ -323,6 +296,7 @@ const runBacktest = async () => {
 
 .chart-container {
   flex: 1;
+  min-height: 800px; /* Increased height for multi-grid */
   display: flex;
   align-items: center;
   justify-content: center;
