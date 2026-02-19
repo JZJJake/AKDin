@@ -1,7 +1,7 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import stocks, backtest
+from app.routers import stocks, backtest, screener
 
 app = FastAPI(title="Stock Strategy Platform API", version="1.0.0")
 
@@ -20,6 +20,7 @@ app.add_middleware(
 # Include Routers
 app.include_router(stocks.router, prefix="/api/v1", tags=["stocks"])
 app.include_router(backtest.router, prefix="/api/v1", tags=["backtest"])
+app.include_router(screener.router, prefix="/api/v1", tags=["screener"])
 
 @app.get("/")
 def read_root():
