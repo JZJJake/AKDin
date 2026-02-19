@@ -8,3 +8,5 @@ pandas
 python-dotenv
 requests
 pydantic-settings
+celery
+redis
