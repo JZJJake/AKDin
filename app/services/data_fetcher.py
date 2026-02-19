@@ -28,13 +28,36 @@ class DataFetcher:
         :param end_date: End date in "YYYYMMDD" format
         :param period: Period, e.g., "daily", "weekly", "monthly"
         :param adjust: Adjustment type, default "qfq" (forward adjusted)
-        :return: DataFrame with historical data
+        :return: DataFrame with historical data, standardized columns (date, open, close, high, low, volume, amount)
         """
         try:
-            # ak.stock_zh_a_hist requires symbol as a string.
-            # Note: AkShare might need just the 6-digit code or with market prefix depending on the function.
-            # stock_zh_a_hist takes the 6 digit code usually.
+            # ak.stock_zh_a_hist returns columns like: '日期', '开盘', '收盘', '最高', '最低', '成交量', '成交额', '振幅', '涨跌幅', '涨跌额', '换手率'
             df = ak.stock_zh_a_hist(symbol=symbol, period=period, start_date=start_date, end_date=end_date, adjust=adjust)
+
+            if df is None or df.empty:
+                return pd.DataFrame()
+
+            # Rename columns to standard English names
+            rename_map = {
+                '日期': 'date',
+                '开盘': 'open',
+                '收盘': 'close',
+                '最高': 'high',
+                '最低': 'low',
+                '成交量': 'volume',
+                '成交额': 'amount',
+            }
+            df.rename(columns=rename_map, inplace=True)
+
+            # Ensure date column is datetime and set as index
+            if 'date' in df.columns:
+                df['date'] = pd.to_datetime(df['date'])
+                df.set_index('date', inplace=True)
+
+            # Add symbol column if missing (useful for multi-symbol strategies later)
+            if 'symbol' not in df.columns:
+                df['symbol'] = symbol
+
             return df
         except Exception as e:
             print(f"Error fetching kline data for {symbol}: {e}")
