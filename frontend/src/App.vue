@@ -5,38 +5,28 @@ import { RouterView } from 'vue-router'
 
 <template>
   <el-container class="layout-container">
-    <el-aside width="200px">
+    <el-header class="main-header">
+      <div class="logo">
+        <h2>智能量化投研平台</h2>
+      </div>
       <el-menu
         router
         :default-active="$route.path"
-        class="el-menu-vertical-demo"
+        mode="horizontal"
+        class="top-menu"
         background-color="#545c64"
         text-color="#fff"
         active-text-color="#ffd04b"
       >
-        <el-menu-item index="/market">
-          <span>行情中心</span>
-        </el-menu-item>
-        <el-menu-item index="/lab">
-          <span>策略研究室</span>
-        </el-menu-item>
-        <el-menu-item index="/screener">
-          <span>智能选股</span>
-        </el-menu-item>
+        <el-menu-item index="/market">行情中心</el-menu-item>
+        <el-menu-item index="/lab">策略研究室</el-menu-item>
+        <el-menu-item index="/screener">智能选股</el-menu-item>
       </el-menu>
-    </el-aside>
+    </el-header>
 
-    <el-container>
-      <el-header>
-        <div class="header-content">
-          <h2>智能量化投研平台</h2>
-        </div>
-      </el-header>
-
-      <el-main>
-        <RouterView />
-      </el-main>
-    </el-container>
+    <el-main class="main-content">
+      <RouterView />
+    </el-main>
   </el-container>
 </template>
 
@@ -46,6 +36,7 @@ html, body {
   margin: 0;
   padding: 0;
   height: 100%;
+  overflow: hidden; /* Prevent body scroll */
 }
 #app {
   height: 100%;
@@ -55,18 +46,44 @@ html, body {
 <style scoped>
 .layout-container {
   height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
-.el-aside {
+.main-header {
   background-color: #545c64;
-  color: white;
-}
-
-.el-header {
-  background-color: #fff;
-  border-bottom: 1px solid #dcdfe6;
   display: flex;
   align-items: center;
+  height: 50px !important; /* Compact height */
   padding: 0 20px;
+}
+
+.logo {
+  margin-right: 40px;
+  color: #fff;
+}
+
+.logo h2 {
+  margin: 0;
+  font-size: 18px;
+  white-space: nowrap;
+}
+
+.top-menu {
+  border-bottom: none;
+  height: 50px;
+  line-height: 50px;
+  flex: 1;
+}
+
+.el-menu-item {
+  height: 50px;
+  line-height: 50px;
+}
+
+.main-content {
+  flex: 1;
+  padding: 0; /* Remove default padding to let views take full space */
+  overflow: hidden;
 }
 </style>

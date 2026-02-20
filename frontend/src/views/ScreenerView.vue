@@ -4,8 +4,9 @@ import { ref } from 'vue'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
-const code = ref(`import pandas as pd
-from app.engine.base import BaseStrategy
+const code = ref(`# Imports are pre-loaded in the sandbox:
+# import pandas as pd
+# from app.engine.base import BaseStrategy
 
 class SMACrossStrategy(BaseStrategy):
     def init(self):
