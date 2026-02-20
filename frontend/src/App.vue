@@ -15,13 +15,13 @@ import { RouterView } from 'vue-router'
         active-text-color="#ffd04b"
       >
         <el-menu-item index="/market">
-          <span>Market</span>
+          <span>行情中心</span>
         </el-menu-item>
         <el-menu-item index="/lab">
-          <span>Quant Lab</span>
+          <span>策略研究室</span>
         </el-menu-item>
         <el-menu-item index="/screener">
-          <span>Screener</span>
+          <span>智能选股</span>
         </el-menu-item>
       </el-menu>
     </el-aside>
@@ -29,7 +29,7 @@ import { RouterView } from 'vue-router'
     <el-container>
       <el-header>
         <div class="header-content">
-          <h2>Stock Strategy Platform</h2>
+          <h2>智能量化投研平台</h2>
         </div>
       </el-header>
 

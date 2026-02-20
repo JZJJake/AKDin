@@ -24,20 +24,20 @@ const tableData = ref([
 
 <template>
   <div class="market-view">
-    <h3>Market Overview</h3>
+    <h3>全市场行情</h3>
     <el-table :data="tableData" style="width: 100%" stripe>
-      <el-table-column prop="symbol" label="Symbol" width="120" />
-      <el-table-column prop="name" label="Name" width="150" />
-      <el-table-column prop="price" label="Current Price" />
-      <el-table-column prop="change" label="Change %">
+      <el-table-column prop="symbol" label="代码" width="120" />
+      <el-table-column prop="name" label="名称" width="150" />
+      <el-table-column prop="price" label="最新价" />
+      <el-table-column prop="change" label="涨跌幅">
         <template #default="scope">
           <span :style="{ color: scope.row.change >= 0 ? 'red' : 'green' }">
             {{ scope.row.change }}%
           </span>
         </template>
       </el-table-column>
-      <el-table-column prop="volume" label="Volume" />
-      <el-table-column prop="turnover" label="Turnover %" />
+      <el-table-column prop="volume" label="成交量" />
+      <el-table-column prop="turnover" label="换手率" />
     </el-table>
   </div>
 </template>

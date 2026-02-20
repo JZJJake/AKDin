@@ -39,21 +39,21 @@ const runScreener = async () => {
       strategy_code: code.value
     }
 
-    ElMessage.info('Screening market... this may take a moment.')
+    ElMessage.info('正在执行全市场选股扫描... 请稍候')
 
     // Assuming backend is running on 8000
     const response = await axios.post('http://localhost:8000/api/v1/screen', payload)
     results.value = response.data.hits
 
     if (results.value.length > 0) {
-      ElMessage.success(`Found ${results.value.length} signals!`)
+      ElMessage.success(`扫描完成！共发现 ${results.value.length} 个买入信号`)
     } else {
-      ElMessage.info('No signals found with current strategy.')
+      ElMessage.info('当前策略未扫描到符合条件的股票。')
     }
   } catch (e: any) {
     console.error(e)
     const msg = e.response?.data?.detail || e.message
-    ElMessage.error('Screener failed: ' + msg)
+    ElMessage.error('扫描失败: ' + msg)
   } finally {
     isLoading.value = false
   }
@@ -61,9 +61,9 @@ const runScreener = async () => {
 
 const toggleMonitor = (val: boolean) => {
   if (val) {
-    ElMessage.success("Auto-Monitor activated. Signals will be pushed via WeChat.")
+    ElMessage.success("自动盯盘已开启。买入信号将推送到微信。")
   } else {
-    ElMessage.info("Auto-Monitor deactivated.")
+    ElMessage.info("自动盯盘已关闭。")
   }
 }
 </script>
@@ -72,7 +72,7 @@ const toggleMonitor = (val: boolean) => {
   <div class="screener-view">
     <div class="top-section">
       <div class="section-header">
-        <h3>Strategy Scanner</h3>
+        <h3>选股策略代码</h3>
       </div>
       <div class="editor-wrapper">
         <vue-monaco-editor
@@ -92,27 +92,27 @@ const toggleMonitor = (val: boolean) => {
 
     <div class="action-bar">
       <el-button type="primary" :loading="isLoading" @click="runScreener">
-        Run Screener (扫描股票)
+        一键扫描全市场
       </el-button>
 
       <div class="monitor-switch">
-        <span>Auto-Monitor (自动盯盘)</span>
+        <span>自动盯盘 (开启后推送到微信)</span>
         <el-switch v-model="autoMonitor" @change="toggleMonitor" />
       </div>
     </div>
 
     <div class="results-section">
-      <h3>Screening Results</h3>
+      <h3>选股扫描结果</h3>
       <el-table :data="results" style="width: 100%" stripe border>
-        <el-table-column prop="symbol" label="Symbol" width="120" />
-        <el-table-column prop="name" label="Name" width="150" />
-        <el-table-column prop="price" label="Signal Price">
+        <el-table-column prop="symbol" label="代码" width="120" />
+        <el-table-column prop="name" label="名称" width="150" />
+        <el-table-column prop="price" label="触发价格">
           <template #default="scope">
             ¥{{ scope.row.price.toFixed(2) }}
           </template>
         </el-table-column>
-        <el-table-column prop="signal_date" label="Signal Date" width="180" />
-        <el-table-column prop="signal_type" label="Type" width="100">
+        <el-table-column prop="signal_date" label="信号日期" width="180" />
+        <el-table-column prop="signal_type" label="类型" width="100">
           <template #default="scope">
             <el-tag type="danger">{{ scope.row.signal_type }}</el-tag>
           </template>

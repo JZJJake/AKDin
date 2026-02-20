@@ -77,7 +77,7 @@ const runBacktest = async () => {
       period: timeframe.value
     }
 
-    ElMessage.info(`Running backtest (${timeframe.value})...`)
+    ElMessage.info(`正在执行回测计算... (${timeframe.value})`)
 
     const response = await axios.post('http://localhost:8000/api/v1/backtest', payload)
     const result = response.data
@@ -190,15 +190,15 @@ const runBacktest = async () => {
         myChart.resize()
 
         const returnPct = (result.total_return * 100).toFixed(2)
-        ElMessage.success(`Backtest Complete! Return: ${returnPct}%`)
+        ElMessage.success(`回测完成！区间收益率：${returnPct}%`)
       }
     } else {
-        ElMessage.warning('Backtest finished but returned no data.')
+        ElMessage.warning('回测已完成但没有返回数据。')
     }
   } catch (e: any) {
     console.error(e)
     const msg = e.response?.data?.detail || e.message
-    ElMessage.error('Backtest failed: ' + msg)
+    ElMessage.error('回测失败: ' + msg)
   }
 }
 </script>
@@ -207,7 +207,7 @@ const runBacktest = async () => {
   <div class="lab-view">
     <div class="editor-pane">
       <div class="pane-header">
-        <h3>Strategy Editor</h3>
+        <h3>策略代码编辑器</h3>
       </div>
       <div class="editor-container">
         <vue-monaco-editor
@@ -227,19 +227,19 @@ const runBacktest = async () => {
 
     <div class="visual-pane">
       <div class="pane-header actions-header">
-        <h3>Backtest Result</h3>
+        <h3>回测与图表分析</h3>
         <div class="actions">
             <el-radio-group v-model="timeframe" size="small" style="margin-right: 15px;">
-                <el-radio-button label="daily">Daily</el-radio-button>
-                <el-radio-button label="weekly">Weekly</el-radio-button>
-                <el-radio-button label="monthly">Monthly</el-radio-button>
+                <el-radio-button label="daily">日线</el-radio-button>
+                <el-radio-button label="weekly">周线</el-radio-button>
+                <el-radio-button label="monthly">月线</el-radio-button>
             </el-radio-group>
-            <el-button type="primary" @click="runBacktest">一键回测 (Run Backtest)</el-button>
+            <el-button type="primary" @click="runBacktest">一键回测</el-button>
         </div>
       </div>
       <div class="chart-container">
         <div v-show="!hasResult" class="chart-placeholder-text">
-          Backtest visualization will appear here
+          回测图表与买卖点标记将在此显示
         </div>
         <div ref="chartRef" style="width: 100%; height: 100%;" v-show="hasResult"></div>
       </div>
