@@ -65,19 +65,36 @@ class MultiTimeframeKDJStrategy(BaseStrategy):
 const chartRef = ref<HTMLElement | null>(null)
 const hasResult = ref(false)
 const timeframe = ref('daily')
+// Default date range: Past year
+const dateRange = ref<[Date, Date]>([
+  new Date(new Date().setFullYear(new Date().getFullYear() - 1)),
+  new Date()
+])
 let myChart: echarts.ECharts | null = null
+
+const formatDate = (date: Date) => {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}${m}${d}`
+}
 
 const runBacktest = async () => {
   try {
+    if (!dateRange.value || dateRange.value.length < 2) {
+      ElMessage.warning('请选择回测时间范围')
+      return
+    }
+
     const payload = {
       strategy_code: code.value,
       symbol: "000001",
-      start_date: "20230101",
-      end_date: "20240101",
+      start_date: formatDate(dateRange.value[0]),
+      end_date: formatDate(dateRange.value[1]),
       period: timeframe.value
     }
 
-    ElMessage.info(`正在执行回测计算... (${timeframe.value})`)
+    ElMessage.info(`正在执行回测计算... (${timeframe.value}, ${payload.start_date}-${payload.end_date})`)
 
     const response = await axios.post('http://localhost:8000/api/v1/backtest', payload)
     const result = response.data
@@ -229,6 +246,15 @@ const runBacktest = async () => {
       <div class="pane-header actions-header">
         <h3>回测与图表分析</h3>
         <div class="actions">
+            <el-date-picker
+              v-model="dateRange"
+              type="daterange"
+              range-separator="至"
+              start-placeholder="开始日期"
+              end-placeholder="结束日期"
+              size="small"
+              style="margin-right: 15px; width: 240px;"
+            />
             <el-radio-group v-model="timeframe" size="small" style="margin-right: 15px;">
                 <el-radio-button label="daily">日线</el-radio-button>
                 <el-radio-button label="weekly">周线</el-radio-button>
