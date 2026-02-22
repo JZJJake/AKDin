@@ -8,25 +8,103 @@ const code = ref(`# Imports are pre-loaded in the sandbox:
 # import pandas as pd
 # from app.engine.base import BaseStrategy
 
-class SMACrossStrategy(BaseStrategy):
+class ProfessionalStrategy(BaseStrategy):
     def init(self):
-        self.sma_period = 20
+        self.n = 9
+        self.m1 = 3
+        self.m2 = 3
+        self.ma_period = 20
 
     def next(self):
-        if len(self.data) < self.sma_period + 1: return
+        df = self.data
+        if len(df) < 60: return
 
-        # Calculate SMA
-        sma = self.data['close'].rolling(window=self.sma_period).mean()
-        current_ma = sma.iloc[-1]
-        prev_ma = sma.iloc[-2]
+        # 0. 基础数据
+        symbol = str(df['symbol'].iloc[-1])
+        current_close = df['close'].iloc[-1]
 
-        current_price = self.data['close'].iloc[-1]
-        prev_price = self.data['close'].iloc[-2]
+        # 1. 基础过滤 (Basic Filter)
+        # 过滤科创板 (68开头)
+        if symbol.startswith('68'): return
+        # 过滤ST股 (假设数据中有name列，或需要在选股器外部过滤)
+        if 'name' in df.columns and 'ST' in str(df['name'].iloc[-1]): return
+        # 流动性过滤: 成交金额 > 1000万
+        if 'amount' in df.columns and df['amount'].iloc[-1] < 10000000: return
 
-        # Golden Cross Condition: Price crosses above MA
-        if prev_price < prev_ma and current_price > current_ma:
-            if self.position.quantity == 0:
-                self.buy(100)
+        # 2. 日线级别逻辑 (Daily Logic)
+        # 计算 MA20
+        ma20 = df['close'].rolling(window=self.ma_period).mean()
+
+        # 计算 KDJ
+        low_min = df['low'].rolling(window=self.n).min()
+        high_max = df['high'].rolling(window=self.n).max()
+        rsv = (df['close'] - low_min) / (high_max - low_min) * 100
+        k = rsv.ewm(alpha=1/self.m1, adjust=False).mean()
+        d = k.ewm(alpha=1/self.m2, adjust=False).mean()
+        j = 3 * k - 2 * d
+
+        # A3 条件: 收阳线 & M20向上 & 收盘站上M20
+        is_yang = current_close > df['open'].iloc[-1]
+        ma20_up = ma20.iloc[-1] > ma20.iloc[-2]
+        on_ma20 = current_close > ma20.iloc[-1]
+        cond_a3 = is_yang and ma20_up and on_ma20
+
+        # KDJJ 条件: J值触底反弹/金叉 (昨日J<=50, 今日J>昨日J, 昨日J<前日J)
+        j_now = j.iloc[-1]
+        j_prev1 = j.iloc[-2]
+        j_prev2 = j.iloc[-3]
+        cond_kdjj = (j_prev1 <= 50) and (j_now > j_prev1) and (j_prev1 < j_prev2)
+
+        buy_signal = cond_a3 and cond_kdjj
+
+        # 3. 周线级别逻辑 (Weekly Filter)
+        # 只有当日线满足买入条件时，才去计算周线，节省性能
+        if buy_signal:
+            # 重采样为周线 (Week ending Friday)
+            df_weekly = df.resample('W-FRI').agg({
+                'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last'
+            }).dropna()
+
+            if len(df_weekly) < 5: return # 样本不足
+
+            # 趋势结构: 顶顶高(High)、底底高(Low)
+            # 取最近两根完整周线 (不含当前周)
+            w_last = df_weekly.iloc[-2]
+            w_prev = df_weekly.iloc[-3]
+            trend_up = (w_last['high'] > w_prev['high']) and (w_last['low'] > w_prev['low'])
+
+            # 周线 MACD (12, 26, 9)
+            w_ema12 = df_weekly['close'].ewm(span=12, adjust=False).mean()
+            w_ema26 = df_weekly['close'].ewm(span=26, adjust=False).mean()
+            w_dif = w_ema12 - w_ema26
+            w_dea = w_dif.ewm(span=9, adjust=False).mean()
+            # DEA (EDA) 向上
+            dea_up = w_dea.iloc[-2] > w_dea.iloc[-3]
+
+            # 周线 KDJ (9, 3, 3)
+            w_low_min = df_weekly['low'].rolling(window=9).min()
+            w_high_max = df_weekly['high'].rolling(window=9).max()
+            w_rsv = (df_weekly['close'] - w_low_min) / (w_high_max - w_low_min) * 100
+            w_k = w_rsv.ewm(alpha=1/3, adjust=False).mean()
+            w_d = w_k.ewm(alpha=1/3, adjust=False).mean()
+            w_j = 3 * w_k - 2 * w_d
+
+            # KDJ 条件: 前一个J值在50以下且向上
+            # 注意: iloc[-1]是当前周(未走完), 判断趋势通常看已完成的周(iloc[-2])
+            # 但用户描述 "前一个J值" 可能指相对于当前时刻的上一个周期
+            w_j_prev = w_j.iloc[-2]
+            w_j_prev2 = w_j.iloc[-3]
+            kdj_condition = (w_j_prev < 50) and (w_j_prev > w_j_prev2)
+
+            if trend_up and dea_up and kdj_condition:
+                if self.position.quantity == 0:
+                    self.buy(100)
+
+        # 4. 卖出条件 (Sell Logic)
+        # 日线 J > 80 且拐头向下
+        elif self.position.quantity > 0:
+            if j_now > 80 and j_now < j_prev1:
+                self.sell(self.position.quantity)
 `)
 
 const autoMonitor = ref(false)
