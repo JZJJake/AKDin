@@ -19,6 +19,24 @@ class DataFetcher:
             raise
 
     @staticmethod
+    def get_stock_info(symbol: str) -> float:
+        """
+        Fetches total shares for a stock to calculate market cap.
+        Returns total shares (float). Returns 0 if failed.
+        """
+        try:
+            # stock_individual_info_em returns a dataframe with columns "item", "value"
+            # item: 总股本
+            df_info = ak.stock_individual_info_em(symbol=symbol)
+            row = df_info[df_info['item'] == '总股本']
+            if not row.empty:
+                return float(row['value'].values[0])
+            return 0.0
+        except Exception as e:
+            print(f"Error fetching stock info for {symbol}: {e}")
+            return 0.0
+
+    @staticmethod
     def get_kline_data(symbol: str, start_date: str, end_date: str, period: str = "daily", adjust: str = "qfq") -> pd.DataFrame:
         """
         Fetches historical k-line data for a specific stock.
@@ -57,6 +75,10 @@ class DataFetcher:
             # Add symbol column if missing (useful for multi-symbol strategies later)
             if 'symbol' not in df.columns:
                 df['symbol'] = symbol
+
+            # Add total_shares for Market Cap calculation
+            total_shares = DataFetcher.get_stock_info(symbol)
+            df['total_shares'] = total_shares
 
             return df
         except Exception as e:

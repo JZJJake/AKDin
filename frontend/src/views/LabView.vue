@@ -9,102 +9,116 @@ const code = ref(`# Imports are pre-loaded in the sandbox:
 # import pandas as pd
 # from app.engine.base import BaseStrategy
 
-class ProfessionalStrategy(BaseStrategy):
+class ResonanceStrategy(BaseStrategy):
     def init(self):
         self.n = 9
         self.m1 = 3
         self.m2 = 3
         self.ma_period = 20
 
-    def next(self):
-        df = self.data
-        if len(df) < 60: return
+    def check_logic(self, df, period_name="daily"):
+        """
+        通用逻辑检查函数，适用于日/周/月线。
+        返回: (bool) 是否满足买入条件
+        """
+        if len(df) < 30: return False
 
-        # 0. 基础数据
-        symbol = str(df['symbol'].iloc[-1])
-        current_close = df['close'].iloc[-1]
+        # 1. 基础指标计算
+        close = df['close']
+        high = df['high']
+        low = df['low']
 
-        # 1. 基础过滤 (Basic Filter)
-        # 过滤科创板 (68开头)
-        if symbol.startswith('68'): return
-        # 过滤ST股 (假设数据中有name列，或需要在选股器外部过滤)
-        if 'name' in df.columns and 'ST' in str(df['name'].iloc[-1]): return
-        # 流动性过滤: 成交金额 > 1000万
-        if 'amount' in df.columns and df['amount'].iloc[-1] < 10000000: return
+        # 市值过滤 (仅日线检查，且需 total_shares 列存在)
+        if period_name == "daily" and 'total_shares' in df.columns:
+            total_shares = df['total_shares'].iloc[-1]
+            if total_shares > 0:
+                market_cap = close.iloc[-1] * total_shares / 100000000 # 亿
+                if market_cap >= 350: return False
 
-        # 2. 日线级别逻辑 (Daily Logic)
-        # 计算 MA20
-        ma20 = df['close'].rolling(window=self.ma_period).mean()
+        # A3: 收阳 & M20向上 & 站上M20
+        ma20 = close.rolling(window=20).mean()
+        cond_a3 = False
+        if len(ma20) > 2:
+            is_yang = close.iloc[-1] > df['open'].iloc[-1]
+            ma20_up = ma20.iloc[-1] > ma20.iloc[-2]
+            on_ma20 = close.iloc[-1] > ma20.iloc[-1]
+            cond_a3 = is_yang and ma20_up and on_ma20
 
-        # 计算 KDJ
-        low_min = df['low'].rolling(window=self.n).min()
-        high_max = df['high'].rolling(window=self.n).max()
-        rsv = (df['close'] - low_min) / (high_max - low_min) * 100
+        # KDJ (9,3,3)
+        low_min = low.rolling(window=self.n).min()
+        high_max = high.rolling(window=self.n).max()
+        rsv = (close - low_min) / (high_max - low_min) * 100
         k = rsv.ewm(alpha=1/self.m1, adjust=False).mean()
         d = k.ewm(alpha=1/self.m2, adjust=False).mean()
-        j = 3 * k - 2 * d
+        j = 3 * k - 2 * d # e in user formula
 
-        # A3 条件: 收阳线 & M20向上 & 收盘站上M20
-        is_yang = current_close > df['open'].iloc[-1]
-        ma20_up = ma20.iloc[-1] > ma20.iloc[-2]
-        on_ma20 = current_close > ma20.iloc[-1]
-        cond_a3 = is_yang and ma20_up and on_ma20
-
-        # KDJJ 条件: J值触底反弹/金叉 (昨日J<=50, 今日J>昨日J, 昨日J<前日J)
+        # KDJJ: 昨日J<=50 & J金叉
         j_now = j.iloc[-1]
         j_prev1 = j.iloc[-2]
         j_prev2 = j.iloc[-3]
         cond_kdjj = (j_prev1 <= 50) and (j_now > j_prev1) and (j_prev1 < j_prev2)
 
-        buy_signal = cond_a3 and cond_kdjj
+        # MACD (10, 25, 7) - User params
+        ema10 = close.ewm(span=10, adjust=False).mean()
+        ema25 = close.ewm(span=25, adjust=False).mean()
+        diff = ema10 - ema25
+        dea = diff.ewm(span=7, adjust=False).mean()
 
-        # 3. 周线级别逻辑 (Weekly Filter)
-        # 只有当日线满足买入条件时，才去计算周线，节省性能
-        if buy_signal:
-            # 重采样为周线 (Week ending Friday)
-            df_weekly = df.resample('W-FRI').agg({
-                'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last'
-            }).dropna()
+        # MACDD: DEA 向上
+        dea_now = dea.iloc[-1]
+        dea_prev1 = dea.iloc[-2]
+        dea_prev2 = dea.iloc[-3]
+        cond_macdd = (dea_now > dea_prev1) and (dea_prev2 > dea_prev1) # 拐头向上? 用户公式: REF(DEA,2)>REF(DEA,1) 是前前大于前，即前是低点?
+        # User: DEA>REF(DEA,1) AND REF(DEA,2)>REF(DEA,1) --> DEA[-1] > DEA[-2] AND DEA[-3] > DEA[-2]. V型反转.
+        # Let's stick strictly to user formula:
+        cond_macdd = (dea_now > dea_prev1) and (dea_prev2 > dea_prev1)
 
-            if len(df_weekly) < 5: return # 样本不足
+        # Final Condition
+        # A3 AND (KDJJ OR MACDD)
+        return cond_a3 and (cond_kdjj or cond_macdd)
 
-            # 趋势结构: 顶顶高(High)、底底高(Low)
-            # 取最近两根完整周线 (不含当前周)
-            w_last = df_weekly.iloc[-2]
-            w_prev = df_weekly.iloc[-3]
-            trend_up = (w_last['high'] > w_prev['high']) and (w_last['low'] > w_prev['low'])
+    def next(self):
+        df = self.data
+        if len(df) < 60: return
 
-            # 周线 MACD (12, 26, 9)
-            w_ema12 = df_weekly['close'].ewm(span=12, adjust=False).mean()
-            w_ema26 = df_weekly['close'].ewm(span=26, adjust=False).mean()
-            w_dif = w_ema12 - w_ema26
-            w_dea = w_dif.ewm(span=9, adjust=False).mean()
-            # DEA (EDA) 向上
-            dea_up = w_dea.iloc[-2] > w_dea.iloc[-3]
+        # 0. 基础过滤
+        symbol = str(df['symbol'].iloc[-1])
+        if symbol.startswith('68'): return
+        if 'name' in df.columns and 'ST' in str(df['name'].iloc[-1]): return
+        if 'amount' in df.columns and df['amount'].iloc[-1] < 10000000: return
 
-            # 周线 KDJ (9, 3, 3)
-            w_low_min = df_weekly['low'].rolling(window=9).min()
-            w_high_max = df_weekly['high'].rolling(window=9).max()
-            w_rsv = (df_weekly['close'] - w_low_min) / (w_high_max - w_low_min) * 100
-            w_k = w_rsv.ewm(alpha=1/3, adjust=False).mean()
-            w_d = w_k.ewm(alpha=1/3, adjust=False).mean()
-            w_j = 3 * w_k - 2 * w_d
+        # 1. 日线共振
+        if not self.check_logic(df, "daily"): return
 
-            # KDJ 条件: 前一个J值在50以下且向上
-            # 注意: iloc[-1]是当前周(未走完), 判断趋势通常看已完成的周(iloc[-2])
-            # 但用户描述 "前一个J值" 可能指相对于当前时刻的上一个周期
-            w_j_prev = w_j.iloc[-2]
-            w_j_prev2 = w_j.iloc[-3]
-            kdj_condition = (w_j_prev < 50) and (w_j_prev > w_j_prev2)
+        # 2. 周线共振
+        df_weekly = df.resample('W-FRI').agg({
+            'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'
+        }).dropna()
+        if not self.check_logic(df_weekly, "weekly"): return
 
-            if trend_up and dea_up and kdj_condition:
-                if self.position.quantity == 0:
-                    self.buy(100)
+        # 3. 月线共振
+        df_monthly = df.resample('M').agg({
+            'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum'
+        }).dropna()
+        if not self.check_logic(df_monthly, "monthly"): return
 
-        # 4. 卖出条件 (Sell Logic)
-        # 日线 J > 80 且拐头向下
-        elif self.position.quantity > 0:
-            if j_now > 80 and j_now < j_prev1:
+        # 执行买入
+        if self.position.quantity == 0:
+            self.buy(100)
+
+        # 卖出条件: 日线 J > 80 拐头向下
+        # 重新计算日线J (optimize: cache it?)
+        # For simplicity, calculate again or check logic return
+        # User Sell: J>80 拐向下
+        low_min = df['low'].rolling(window=9).min()
+        high_max = df['high'].rolling(window=9).max()
+        rsv = (df['close'] - low_min) / (high_max - low_min) * 100
+        k = rsv.ewm(alpha=1/3, adjust=False).mean()
+        d = k.ewm(alpha=1/3, adjust=False).mean()
+        j = 3 * k - 2 * d
+
+        if self.position.quantity > 0:
+            if j.iloc[-1] > 80 and j.iloc[-1] < j.iloc[-2]:
                 self.sell(self.position.quantity)
 `)
 
@@ -117,6 +131,16 @@ const dateRange = ref<[Date, Date]>([
   new Date()
 ])
 let myChart: echarts.ECharts | null = null
+
+// Statistics
+const stats = ref({
+  totalReturn: 0,
+  maxDrawdown: 0,
+  tradeCount: 0,
+  winRate: 0,
+  finalValue: 0
+})
+const tradeList = ref<any[]>([])
 
 const formatDate = (date: Date) => {
   const y = date.getFullYear()
@@ -173,6 +197,16 @@ const runBacktest = async () => {
       const sellMarkers = result.trades
         .filter((t: any) => t.side === 'sell')
         .map((t: any) => [t.timestamp.substring(0, 10), t.price])
+
+      // Calculate Stats
+      stats.value.totalReturn = result.total_return * 100
+      stats.value.maxDrawdown = result.max_drawdown * 100
+      stats.value.finalValue = result.final_value
+      stats.value.tradeCount = result.trades.length
+      tradeList.value = result.trades.map((t: any) => ({
+        ...t,
+        date: t.timestamp.substring(0, 10)
+      }))
 
       hasResult.value = true
 
@@ -315,6 +349,37 @@ const runBacktest = async () => {
         </div>
         <div ref="chartRef" style="width: 100%; height: 100%;" v-show="hasResult"></div>
       </div>
+
+      <!-- New Statistics Section -->
+      <div v-if="hasResult" class="stats-panel">
+        <el-descriptions title="回测绩效" :column="4" border size="small">
+          <el-descriptions-item label="总收益率">
+            <span :style="{ color: stats.totalReturn >= 0 ? 'red' : 'green' }">
+              {{ stats.totalReturn.toFixed(2) }}%
+            </span>
+          </el-descriptions-item>
+          <el-descriptions-item label="最大回撤">{{ stats.maxDrawdown.toFixed(2) }}%</el-descriptions-item>
+          <el-descriptions-item label="交易次数">{{ stats.tradeCount }}</el-descriptions-item>
+          <el-descriptions-item label="最终权益">{{ stats.finalValue.toFixed(2) }}</el-descriptions-item>
+        </el-descriptions>
+
+        <div class="trade-list">
+          <h4>交易记录</h4>
+          <el-table :data="tradeList" height="150" border size="small" style="width: 100%">
+            <el-table-column prop="date" label="日期" width="120" />
+            <el-table-column prop="symbol" label="代码" width="100" />
+            <el-table-column prop="side" label="方向" width="80">
+                <template #default="scope">
+                    <el-tag :type="scope.row.side === 'buy' ? 'danger' : 'success'">
+                        {{ scope.row.side === 'buy' ? '买入' : '卖出' }}
+                    </el-tag>
+                </template>
+            </el-table-column>
+            <el-table-column prop="price" label="价格" />
+            <el-table-column prop="quantity" label="数量" />
+          </el-table>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -367,19 +432,34 @@ const runBacktest = async () => {
 }
 
 .chart-container {
-  flex: 1;
-  min-height: 800px; /* Increased height for multi-grid */
+  min-height: 700px; /* Adjusted height */
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
   background-color: #ffffff;
   position: relative;
-  overflow: hidden;
 }
 
 .chart-placeholder-text {
   color: #909399;
   font-size: 14px;
   position: absolute;
+}
+
+.stats-panel {
+    padding: 15px;
+    background-color: #fff;
+    border-top: 1px solid #eee;
+}
+
+.trade-list {
+    margin-top: 15px;
+}
+
+.trade-list h4 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+    color: #606266;
 }
 </style>
